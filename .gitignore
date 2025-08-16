@@ -1,0 +1,8 @@
+slack-dm-to-whatsapp.cjs
+watch-downloads.js
+watch-wa-downloads.cjs
+whats.js
+server.cjs
+send.telegram.js
+/node_modules
+.env
