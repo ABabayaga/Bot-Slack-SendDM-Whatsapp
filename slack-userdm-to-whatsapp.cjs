@@ -1,8 +1,17 @@
 'use strict';
 require('dotenv').config({ override: true });
 
-const { WebClient } = require('@slack/web-api');
+const { WebClient, LogLevel } = require('@slack/web-api');
 
+const QuietLogger = {
+    getLevel: () => LogLevel.NONE,
+    setLevel: () => {},
+    debug: () => {},
+    info:  () => {},
+    warn:  () => {},
+    error: () => {}
+  };
+  
 const TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const DEST_NUMBERS = (process.env.DEST_NUMBERS || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -24,7 +33,9 @@ if (!/^xoxp-/.test(SLACK_USER_TOKEN)) {
   process.exit(1);
 }
 
-const slack = new WebClient(SLACK_USER_TOKEN);
+const slack = new WebClient(SLACK_USER_TOKEN, { logger: QuietLogger });
+
+//const slack = new WebClient(SLACK_USER_TOKEN);
 
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
@@ -316,3 +327,4 @@ async function pollOnce() {
     await sleep(5000); // ajuste o intervalo (ms) geral de varredura
   }
 })();
+
