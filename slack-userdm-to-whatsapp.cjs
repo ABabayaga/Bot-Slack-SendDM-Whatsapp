@@ -39,6 +39,26 @@ const slack = new WebClient(SLACK_USER_TOKEN, { logger: QuietLogger });
 
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
+// ===== Janela de 24h (WhatsApp) =====
+const lastWindowAtByNumber = new Map();
+const WA_WINDOW_MS = Number(process.env.WA_WINDOW_MS || 23*60*60*1000); // 23h
+
+function is24hWindowError(err) {
+  const s = String(err?.message || '');
+  // cobre várias mensagens do Graph/WA
+  return /131051|24 ?hour|outside.*24|HSM|template|required/i.test(s);
+}
+
+async function ensureWaWindow(to) {
+  const last = lastWindowAtByNumber.get(to) || 0;
+  if (Date.now() - last > WA_WINDOW_MS) {
+    await waSendTemplate(to);        // abre a janela
+    await sleep(1200);
+    lastWindowAtByNumber.set(to, Date.now());
+  }
+}
+
+
 // ===== WhatsApp helpers =====
 async function waSendText(to, body) {
   const payload = { messaging_product: 'whatsapp', to, type: 'text', text: { body, preview_url: false } };
@@ -97,30 +117,39 @@ async function waSendTemplate(to) {
   return data;
 }
 async function waSafeText(to, body) {
-  try { return await waSendText(to, body); }
-  catch (err) {
-    const s = String(err.message || '');
-    if (s.includes('131051') || s.includes('24')) {
+  await ensureWaWindow(to);
+  try {
+    const r = await waSendText(to, body);
+    lastWindowAtByNumber.set(to, Date.now());
+    return r;
+  } catch (err) {
+    if (is24hWindowError(err)) {
       await waSendTemplate(to);
       await sleep(1200);
+      lastWindowAtByNumber.set(to, Date.now());
       return await waSendText(to, body);
     }
     throw err;
   }
 }
 async function waSafeMedia(to, header, bytes, filename, mime) {
+  await ensureWaWindow(to);
   const mediaId = await waUploadMedia(bytes, filename, mime);
   const caption = header.slice(0, 900);
   try {
-    if ((mime || '').startsWith('image/')) return await waSendImage(to, mediaId, caption);
-    return await waSendDoc(to, mediaId, filename, caption);
+    const r = (mime || '').startsWith('image/')
+      ? await waSendImage(to, mediaId, caption)
+      : await waSendDoc(to, mediaId, filename, caption);
+    lastWindowAtByNumber.set(to, Date.now());
+    return r;
   } catch (err) {
-    const s = String(err.message || '');
-    if (s.includes('131051') || s.includes('24')) {
+    if (is24hWindowError(err)) {
       await waSendTemplate(to);
       await sleep(1200);
-      if ((mime || '').startsWith('image/')) return await waSendImage(to, mediaId, caption);
-      return await waSendDoc(to, mediaId, filename, caption);
+      lastWindowAtByNumber.set(to, Date.now());
+      return (mime || '').startsWith('image/')
+        ? await waSendImage(to, mediaId, caption)
+        : await waSendDoc(to, mediaId, filename, caption);
     }
     throw err;
   }
@@ -230,7 +259,7 @@ async function pollOnce() {
         channel,
         oldest: lastTs,
         inclusive: false,
-        limit: 200
+        limit: 50
       });
 
       // ordena do mais antigo para o mais novo
@@ -324,7 +353,7 @@ async function pollOnce() {
   console.log('⚡️ Espelhando DMs pessoais (User Token) com cooldown por conversa.');
   while (true) {
     await pollOnce();
-    await sleep(5000); // ajuste o intervalo (ms) geral de varredura
+    await sleep(30000); // ajuste o intervalo (ms) geral de varredura
   }
 })();
 
