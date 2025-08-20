@@ -6,3 +6,6 @@ server.cjs
 send.telegram.js
 /node_modules
 .env
+slack-userdm-to-whatsapp.py
+fit-reducer-469000-t2-1b8548ca2b79.json
+drive-to-whatsapp.cjs
